@@ -45,7 +45,7 @@ read_doc_file(char* path, GSList *list) {
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
-            list = g_slist_append(list, g_string_new(term->str));
+            list = g_slist_append(list, g_string_new(g_strstrip(term->str)));
             g_string_free(term, TRUE);
             term = g_string_new("");
             continue;
@@ -53,7 +53,7 @@ read_doc_file(char* path, GSList *list) {
         g_string_append_c(term, (char)c);
     }
 
-    list = g_slist_append (list, g_string_new(term->str));
+    list = g_slist_append (list, g_string_new(g_strstrip(term->str)));
     g_string_free(term, TRUE);
 
     fclose(file);
@@ -62,7 +62,9 @@ read_doc_file(char* path, GSList *list) {
 void
 display_terms(GSList *list) {
     int nIndex;
-    gpointer node;
-    printf("Display terms called\n");
-    g_print("Last data = %s\n", ((GString *) (g_slist_last(list)->data))->str);
+    GSList *node = list;
+
+    while ((node = node->next) != NULL) {
+        g_print("data = %s\n", ((GString *) (node->data))->str);
+    }
 }
