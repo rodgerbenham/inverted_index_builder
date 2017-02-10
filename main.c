@@ -15,6 +15,7 @@ void read_doc_file(int, char*, GSList*);
 term_docs_t* generate_term_doc(char*, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 void for_each_list_item(GSList*, void (*action)(GSList *list)); 
+void collect_term_docs(GSList*);
 void display_term_docs(GSList*);
 void clear_term_docs(GSList*);
 
@@ -35,7 +36,10 @@ main (int argc, char* argv[]) {
     g_print("=== Sorted ===\n\n");
     termDocList = g_slist_sort(termDocList, (GCompareFunc)term_sort_comparator);
     for_each_list_item(termDocList, display_term_docs);
-    
+    g_print("=== Collect ===\n\n");
+    for_each_list_item(termDocList, collect_term_docs);
+    for_each_list_item(termDocList, display_term_docs);
+
     for_each_list_item(termDocList, clear_term_docs);
     g_slist_free(termDocList);
     return 0;
@@ -63,7 +67,7 @@ read_doc_file(int doc_id, char* path, GSList *list) {
         g_string_append_c(term, (char)c);
     }
 
-    list = g_slist_append (list, generate_term_doc(term->str, doc_id));
+    list = g_slist_append(list, generate_term_doc(term->str, doc_id));
     g_string_free(term, TRUE);
 
     fclose(file);
@@ -105,14 +109,43 @@ for_each_list_item(GSList *list, void (*action)(GSList *list)) {
 void
 display_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
-    g_print("term = %s, doc = %d\n", 
-            term_doc->term->str, 
-            GPOINTER_TO_INT(term_doc->doc_ids->data));
+    g_print("term = %s, doc = ", term_doc->term->str);
+    GSList *next = term_doc->doc_ids;
+    g_print("%d ", GPOINTER_TO_INT(next->data));
+
+    while ((next = next->next) != NULL) {
+        g_print("%d ", GPOINTER_TO_INT(next->data));
+    }
+    g_print("\n");
+}
+
+void
+collect_term_docs(GSList *node) {
+    term_docs_t* term_doc = (term_docs_t*) node->data; 
+    GSList* next = NULL; 
+    while ((next = node->next) != NULL) {
+        term_docs_t* next_term_doc = NULL; 
+        next_term_doc = (term_docs_t*) next->data;
+        if (term_sort_comparator(term_doc, next_term_doc) == 0) {
+            term_doc->doc_ids = g_slist_append(term_doc->doc_ids,
+                    next_term_doc->doc_ids->data);
+            node->next = next->next;
+
+            clear_term_docs(next);
+            g_free(next);
+        }
+        else {
+            break;
+        }
+    }
+
+    node->next = next;
 }
 
 void
 clear_term_docs(GSList *node) {
-    g_string_free(((term_docs_t *) (node->data))->term, TRUE);
-    g_slist_free(((term_docs_t *) (node->data))->doc_ids);
-    free(((term_docs_t *) (node->data)));
+    term_docs_t* term_docs = (term_docs_t *)node->data;
+    g_string_free(term_docs->term, TRUE);
+    g_slist_free(term_docs->doc_ids);
+    free(term_docs);
 }
