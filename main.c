@@ -13,6 +13,7 @@ struct TermDoc {
 void get_doc_path(int, char*);
 void read_doc_file(int, char*, GSList*);
 term_doc_t* generate_term_doc(char*, int); 
+gint term_sort_comparator(gconstpointer, gconstpointer);
 void for_each_list_item(GSList*, void (*action)(GSList *list)); 
 void display_term_docs(GSList*);
 void clear_term_docs(GSList*);
@@ -29,7 +30,12 @@ main (int argc, char* argv[]) {
         read_doc_file(i, path, termDocList);
     }
 
+    g_print("=== Unsorted ===\n\n");
     for_each_list_item(termDocList, display_term_docs);
+    g_print("=== Sorted ===\n\n");
+    termDocList = g_slist_sort(termDocList, (GCompareFunc)term_sort_comparator);
+    for_each_list_item(termDocList, display_term_docs);
+    
     for_each_list_item(termDocList, clear_term_docs);
     g_slist_free(termDocList);
     return 0;
@@ -69,6 +75,20 @@ generate_term_doc(char* term, int doc_id) {
     t_doc->term = g_string_new(g_strstrip(term));
     t_doc->doc_id = doc_id;
     return t_doc;
+}
+
+gint
+term_sort_comparator(gconstpointer item1, gconstpointer item2) {
+    term_doc_t* term_doc_1 = (term_doc_t*) item1; 
+    term_doc_t* term_doc_2 = (term_doc_t*) item2; 
+    if (term_doc_1 != NULL && term_doc_2 != NULL) {
+        // CASE: Normal case
+        return g_ascii_strcasecmp(term_doc_1->term->str, term_doc_2->term->str);
+    }
+
+    // CASE: Initial allocation of the list where data = NULL.
+    // Workaround for list falling out of scope in read_doc_file due to g_slist_alloc.
+    return -1;
 }
 
 void
