@@ -1,18 +1,20 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <glib.h>
 
 #define DOCUMENT_COUNT 4
 #define MAX_DOC_PATH 20
 
-void get_doc_path(int, char*);
-void read_doc_file(char*, GSList*);
-void display_terms(GSList*);
-void clear_terms(GSList*);
-
 struct TermDoc {
-    GString term;
+    GString *term;
     int doc;
-} typedef term_doc;
+} typedef term_doc_t;
+
+void get_doc_path(int, char*);
+void read_doc_file(int, char*, GSList*);
+term_doc_t* generate_term_doc(char*, int); 
+void display_term_docs(GSList*);
+void clear_term_docs(GSList*);
 
 int
 main (int argc, char* argv[]) {
@@ -23,22 +25,22 @@ main (int argc, char* argv[]) {
         char path[MAX_DOC_PATH];
 
         get_doc_path(i, path);
-        read_doc_file(path, termDocList);
+        read_doc_file(i, path, termDocList);
     }
 
-    display_terms(termDocList);
-    clear_terms(termDocList);
+    display_term_docs(termDocList);
+    clear_term_docs(termDocList);
     g_slist_free(termDocList);
     return 0;
 }
 
 void
-get_doc_path(int id, char *path) {
-    sprintf(path, "./docs/doc%d", id);
+get_doc_path(int doc_id, char *path) {
+    sprintf(path, "./docs/doc%d", doc_id);
 }
 
 void
-read_doc_file(char* path, GSList *list) {
+read_doc_file(int doc_id, char* path, GSList *list) {
     int c;
     FILE *file;
     file = fopen(path, "r");
@@ -46,7 +48,7 @@ read_doc_file(char* path, GSList *list) {
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
-            list = g_slist_append(list, g_string_new(g_strstrip(term->str)));
+            list = g_slist_append(list, generate_term_doc(term->str, doc_id));
             g_string_free(term, TRUE);
             term = g_string_new("");
             continue;
@@ -54,28 +56,37 @@ read_doc_file(char* path, GSList *list) {
         g_string_append_c(term, (char)c);
     }
 
-    list = g_slist_append (list, g_string_new(g_strstrip(term->str)));
+    list = g_slist_append (list, generate_term_doc(term->str, doc_id));
     g_string_free(term, TRUE);
 
     fclose(file);
 }
 
+term_doc_t*
+generate_term_doc(char* term, int doc_id) {
+    term_doc_t *t_doc = malloc(sizeof(term_doc_t));
+    t_doc->term = g_string_new(g_strstrip(term));
+    t_doc->doc = doc_id;
+    return t_doc;
+}
+
 void
-display_terms(GSList *list) {
+display_term_docs(GSList *list) {
     int nIndex;
     GSList *node = list;
 
     while ((node = node->next) != NULL) {
-        g_print("data = %s\n", ((GString *) (node->data))->str);
+        g_print("data = %s\n", ((term_doc_t*) (node->data))->term->str);
     }
 }
 
 void
-clear_terms(GSList *list) {
+clear_term_docs(GSList *list) {
     int nIndex;
     GSList *node = list;
 
     while ((node = node->next) != NULL) {
-        g_string_free(((GString *) (node->data)), TRUE);
+        g_string_free(((term_doc_t *) (node->data))->term, TRUE);
+        free(((term_doc_t *) (node->data)));
     }
 }
