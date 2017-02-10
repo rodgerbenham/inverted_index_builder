@@ -7,7 +7,7 @@
 
 struct TermDoc {
     GString *term;
-    int doc;
+    int doc_id;
 } typedef term_doc_t;
 
 void get_doc_path(int, char*);
@@ -66,7 +66,7 @@ term_doc_t*
 generate_term_doc(char* term, int doc_id) {
     term_doc_t *t_doc = malloc(sizeof(term_doc_t));
     t_doc->term = g_string_new(g_strstrip(term));
-    t_doc->doc = doc_id;
+    t_doc->doc_id = doc_id;
     return t_doc;
 }
 
@@ -76,7 +76,8 @@ display_term_docs(GSList *list) {
     GSList *node = list;
 
     while ((node = node->next) != NULL) {
-        g_print("data = %s\n", ((term_doc_t*) (node->data))->term->str);
+        term_doc_t* term_doc = (term_doc_t*) node->data; 
+        g_print("term = %s, doc = %d\n", term_doc->term->str, term_doc->doc_id);
     }
 }
 
