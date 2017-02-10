@@ -13,6 +13,7 @@ struct TermDoc {
 void get_doc_path(int, char*);
 void read_doc_file(int, char*, GSList*);
 term_doc_t* generate_term_doc(char*, int); 
+void for_each_list_item(GSList*, void (*action)(GSList *list)); 
 void display_term_docs(GSList*);
 void clear_term_docs(GSList*);
 
@@ -28,8 +29,8 @@ main (int argc, char* argv[]) {
         read_doc_file(i, path, termDocList);
     }
 
-    display_term_docs(termDocList);
-    clear_term_docs(termDocList);
+    for_each_list_item(termDocList, display_term_docs);
+    for_each_list_item(termDocList, clear_term_docs);
     g_slist_free(termDocList);
     return 0;
 }
@@ -71,23 +72,23 @@ generate_term_doc(char* term, int doc_id) {
 }
 
 void
-display_term_docs(GSList *list) {
+for_each_list_item(GSList *list, void (*action)(GSList *list)) {
     int nIndex;
     GSList *node = list;
 
     while ((node = node->next) != NULL) {
-        term_doc_t* term_doc = (term_doc_t*) node->data; 
-        g_print("term = %s, doc = %d\n", term_doc->term->str, term_doc->doc_id);
+        (*action)(node);
     }
 }
 
 void
-clear_term_docs(GSList *list) {
-    int nIndex;
-    GSList *node = list;
+display_term_docs(GSList *node) {
+    term_doc_t* term_doc = (term_doc_t*) node->data; 
+    g_print("term = %s, doc = %d\n", term_doc->term->str, term_doc->doc_id);
+}
 
-    while ((node = node->next) != NULL) {
-        g_string_free(((term_doc_t *) (node->data))->term, TRUE);
-        free(((term_doc_t *) (node->data)));
-    }
+void
+clear_term_docs(GSList *node) {
+    g_string_free(((term_doc_t *) (node->data))->term, TRUE);
+    free(((term_doc_t *) (node->data)));
 }
