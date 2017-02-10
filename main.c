@@ -41,8 +41,24 @@ main (int argc, char* argv[]) {
     for_each_list_item(termDocList, collect_term_docs);
     for_each_list_item(termDocList, display_term_docs);
 
+    g_print("=== Convert to array ===\n\n");
+    GPtrArray *postingsArray;
+    postingsArray = g_ptr_array_sized_new(g_slist_length(termDocList) - 1);
+
+    int nIndex = 0;
+    GSList *node = termDocList;
+
+    while ((node = node->next) != NULL) {
+        g_ptr_array_insert(postingsArray, nIndex, node->data);
+        nIndex++;
+    }
+
+    g_print("Value at index 5: %s\n", ((term_docs_t*)(postingsArray->pdata[5]))->term->str);
+
     for_each_list_item(termDocList, clear_term_docs);
     g_slist_free(termDocList);
+    g_ptr_array_free(postingsArray, TRUE);
+
     return 0;
 }
 
@@ -106,7 +122,6 @@ doc_sort_comparator(gconstpointer item1, gconstpointer item2) {
 
 void
 for_each_list_item(GSList *list, void (*action)(GSList *list)) {
-    int nIndex;
     GSList *node = list;
 
     while ((node = node->next) != NULL) {
@@ -145,7 +160,7 @@ collect_term_docs(GSList *node) {
             clear_term_docs(next);
             // Valgrind wants free(next) to be called
             // And allows the program to run without error.
-            // However, calling free here causes a core dump.
+            // However, calling free here causes a core dump when Valgrind isn't running.
             // Leak is rather minimal (32 bytes) but will continue to monitor.
         }
         else {
