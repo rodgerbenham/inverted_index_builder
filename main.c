@@ -7,6 +7,7 @@
 void get_doc_path(int, char*);
 void read_doc_file(char*, GSList*);
 void display_terms(GSList*);
+void clear_terms(GSList*);
 
 struct TermDoc {
     GString term;
@@ -23,11 +24,11 @@ main (int argc, char* argv[]) {
 
         get_doc_path(i, path);
         read_doc_file(path, termDocList);
-        g_print("List count = %d\n", g_slist_length(termDocList));
     }
 
     display_terms(termDocList);
-    //g_slist_free_full(termDocList, g_free);
+    clear_terms(termDocList);
+    g_slist_free(termDocList);
     return 0;
 }
 
@@ -66,5 +67,15 @@ display_terms(GSList *list) {
 
     while ((node = node->next) != NULL) {
         g_print("data = %s\n", ((GString *) (node->data))->str);
+    }
+}
+
+void
+clear_terms(GSList *list) {
+    int nIndex;
+    GSList *node = list;
+
+    while ((node = node->next) != NULL) {
+        g_string_free(((GString *) (node->data)), TRUE);
     }
 }
