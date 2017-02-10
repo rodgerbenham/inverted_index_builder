@@ -146,6 +146,7 @@ collect_term_docs(GSList *node) {
             // Valgrind wants free(next) to be called
             // And allows the program to run without error.
             // However, calling free here causes a core dump.
+            // Leak is rather minimal (32 bytes) but will continue to monitor.
         }
         else {
             break;
