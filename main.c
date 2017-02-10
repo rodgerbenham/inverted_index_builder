@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <glib.h>
 
-#define DOCUMENT_COUNT 4
+#define DOCUMENT_COUNT 9999
 #define MAX_DOC_PATH 20
 
 struct TermDocs {
@@ -35,14 +35,15 @@ main (int argc, char* argv[]) {
         read_doc_file(i, path, termDocList);
     }
 
+    g_print("%d items loaded\n", g_slist_length(termDocList));
     g_print("=== Unsorted ===\n\n");
-    for_each_list_item(termDocList, display_term_docs);
+    //for_each_list_item(termDocList, display_term_docs);
     g_print("=== Sorted ===\n\n");
     termDocList = g_slist_sort(termDocList, (GCompareFunc)term_sort_comparator);
-    for_each_list_item(termDocList, display_term_docs);
+    //for_each_list_item(termDocList, display_term_docs);
     g_print("=== Collect ===\n\n");
     for_each_list_item(termDocList, collect_term_docs);
-    for_each_list_item(termDocList, display_term_docs);
+    //for_each_list_item(termDocList, display_term_docs);
 
     g_print("=== Convert to array ===\n\n");
     GPtrArray *postingsArray;
@@ -56,7 +57,7 @@ main (int argc, char* argv[]) {
         nIndex++;
     }
 
-    term_docs_t* td = bsearch_postings("stanford", 
+    term_docs_t* td = bsearch_postings("hello", 
             postingsArray->pdata, postingsArray->len,
             key_term_comparator);
 
@@ -111,7 +112,7 @@ read_doc_file(int doc_id, char* path, GSList *list) {
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
-            list = g_slist_append(list, generate_term_doc(term->str, doc_id));
+            list = g_slist_insert(list, generate_term_doc(term->str, doc_id), 1);
             g_string_free(term, TRUE);
             term = g_string_new("");
             continue;
@@ -119,7 +120,7 @@ read_doc_file(int doc_id, char* path, GSList *list) {
         g_string_append_c(term, (char)c);
     }
 
-    list = g_slist_append(list, generate_term_doc(term->str, doc_id));
+    list = g_slist_insert(list, generate_term_doc(term->str, doc_id), 1);
     g_string_free(term, TRUE);
 
     fclose(file);
