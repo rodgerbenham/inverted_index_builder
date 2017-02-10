@@ -15,10 +15,13 @@ void read_doc_file(int, char*, GSList*);
 term_docs_t* generate_term_doc(char*, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 gint doc_sort_comparator(gconstpointer, gconstpointer);
+gint key_term_comparator(char*, term_docs_t*);
 void for_each_list_item(GSList*, void (*action)(GSList *list)); 
 void collect_term_docs(GSList*);
 void display_term_docs(GSList*);
 void clear_term_docs(GSList*);
+term_docs_t* bsearch_postings(char *, gpointer *, size_t,
+        int(*compare)(char* key, term_docs_t* doc)); 
 
 int
 main (int argc, char* argv[]) {
@@ -53,13 +56,45 @@ main (int argc, char* argv[]) {
         nIndex++;
     }
 
-    g_print("Value at index 5: %s\n", ((term_docs_t*)(postingsArray->pdata[5]))->term->str);
+    term_docs_t* td = bsearch_postings("stanford", 
+            postingsArray->pdata, postingsArray->len,
+            key_term_comparator);
+
+    g_print("Query matches the following documents: ");
+    GSList *next = td->doc_ids;
+    g_print("%d ", GPOINTER_TO_INT(next->data));
+
+    while ((next = next->next) != NULL) {
+        g_print("%d ", GPOINTER_TO_INT(next->data));
+    }
+    g_print("\n");
 
     for_each_list_item(termDocList, clear_term_docs);
     g_slist_free(termDocList);
     g_ptr_array_free(postingsArray, TRUE);
 
     return 0;
+}
+term_docs_t *
+bsearch_postings (char *key, gpointer *array, size_t num,
+        int(*compare)(char* key, term_docs_t* doc)) {
+    size_t start = 0, end = num;
+    int result;
+
+    while (start < end) {
+        size_t mid = start + (end - start) / 2;
+        term_docs_t* doc = (term_docs_t*) *(array + mid);
+
+        result = compare(key, doc);
+        if (result < 0)
+            end = mid;
+        else if (result > 0)
+            start = mid + 1;
+        else
+            return *(array + mid);
+    }
+
+    return NULL;
 }
 
 void
@@ -97,6 +132,11 @@ generate_term_doc(char* term, int doc_id) {
     t_doc->doc_ids = NULL;
     t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(doc_id));
     return t_doc;
+}
+
+gint
+key_term_comparator(char* key, term_docs_t* term_doc) {
+    return g_ascii_strcasecmp(key, term_doc->term->str);
 }
 
 gint
@@ -162,6 +202,7 @@ collect_term_docs(GSList *node) {
             // And allows the program to run without error.
             // However, calling free here causes a core dump when Valgrind isn't running.
             // Leak is rather minimal (32 bytes) but will continue to monitor.
+            // free(next);
         }
         else {
             break;
