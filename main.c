@@ -14,6 +14,7 @@ void get_doc_path(int, char*);
 void read_doc_file(int, char*, GSList*);
 term_docs_t* generate_term_doc(char*, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
+gint doc_sort_comparator(gconstpointer, gconstpointer);
 void for_each_list_item(GSList*, void (*action)(GSList *list)); 
 void collect_term_docs(GSList*);
 void display_term_docs(GSList*);
@@ -96,6 +97,13 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
     return -1;
 }
 
+gint
+doc_sort_comparator(gconstpointer item1, gconstpointer item2) {
+    int doc1 = GPOINTER_TO_INT(item1); 
+    int doc2 = GPOINTER_TO_INT(item2); 
+    return doc1 - doc2;
+}
+
 void
 for_each_list_item(GSList *list, void (*action)(GSList *list)) {
     int nIndex;
@@ -127,12 +135,17 @@ collect_term_docs(GSList *node) {
         term_docs_t* next_term_doc = NULL; 
         next_term_doc = (term_docs_t*) next->data;
         if (term_sort_comparator(term_doc, next_term_doc) == 0) {
-            term_doc->doc_ids = g_slist_append(term_doc->doc_ids,
-                    next_term_doc->doc_ids->data);
+            if (g_slist_find (term_doc->doc_ids, next_term_doc->doc_ids->data) == NULL) {
+                term_doc->doc_ids = g_slist_insert_sorted(term_doc->doc_ids,
+                    next_term_doc->doc_ids->data, (GCompareFunc)doc_sort_comparator);
+            }
+            
             node->next = next->next;
 
             clear_term_docs(next);
-            g_free(next);
+            // Valgrind wants free(next) to be called
+            // And allows the program to run without error.
+            // However, calling free here causes a core dump.
         }
         else {
             break;
@@ -147,5 +160,5 @@ clear_term_docs(GSList *node) {
     term_docs_t* term_docs = (term_docs_t *)node->data;
     g_string_free(term_docs->term, TRUE);
     g_slist_free(term_docs->doc_ids);
-    free(term_docs);
+    g_free(term_docs);
 }
