@@ -5,14 +5,14 @@
 #define DOCUMENT_COUNT 4
 #define MAX_DOC_PATH 20
 
-struct TermDoc {
+struct TermDocs {
     GString *term;
-    int doc_id;
-} typedef term_doc_t;
+    GSList *doc_ids;
+} typedef term_docs_t;
 
 void get_doc_path(int, char*);
 void read_doc_file(int, char*, GSList*);
-term_doc_t* generate_term_doc(char*, int); 
+term_docs_t* generate_term_doc(char*, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 void for_each_list_item(GSList*, void (*action)(GSList *list)); 
 void display_term_docs(GSList*);
@@ -69,18 +69,19 @@ read_doc_file(int doc_id, char* path, GSList *list) {
     fclose(file);
 }
 
-term_doc_t*
+term_docs_t*
 generate_term_doc(char* term, int doc_id) {
-    term_doc_t *t_doc = malloc(sizeof(term_doc_t));
+    term_docs_t *t_doc = malloc(sizeof(term_docs_t));
     t_doc->term = g_string_new(g_strstrip(term));
-    t_doc->doc_id = doc_id;
+    t_doc->doc_ids = NULL;
+    t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(doc_id));
     return t_doc;
 }
 
 gint
 term_sort_comparator(gconstpointer item1, gconstpointer item2) {
-    term_doc_t* term_doc_1 = (term_doc_t*) item1; 
-    term_doc_t* term_doc_2 = (term_doc_t*) item2; 
+    term_docs_t* term_doc_1 = (term_docs_t*) item1; 
+    term_docs_t* term_doc_2 = (term_docs_t*) item2; 
     if (term_doc_1 != NULL && term_doc_2 != NULL) {
         // CASE: Normal case
         return g_ascii_strcasecmp(term_doc_1->term->str, term_doc_2->term->str);
@@ -103,12 +104,15 @@ for_each_list_item(GSList *list, void (*action)(GSList *list)) {
 
 void
 display_term_docs(GSList *node) {
-    term_doc_t* term_doc = (term_doc_t*) node->data; 
-    g_print("term = %s, doc = %d\n", term_doc->term->str, term_doc->doc_id);
+    term_docs_t* term_doc = (term_docs_t*) node->data; 
+    g_print("term = %s, doc = %d\n", 
+            term_doc->term->str, 
+            GPOINTER_TO_INT(term_doc->doc_ids->data));
 }
 
 void
 clear_term_docs(GSList *node) {
-    g_string_free(((term_doc_t *) (node->data))->term, TRUE);
-    free(((term_doc_t *) (node->data)));
+    g_string_free(((term_docs_t *) (node->data))->term, TRUE);
+    g_slist_free(((term_docs_t *) (node->data))->doc_ids);
+    free(((term_docs_t *) (node->data)));
 }
