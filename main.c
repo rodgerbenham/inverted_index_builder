@@ -5,16 +5,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 0
+#define BLOCKS 1
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
-    GString *term;
+    int term_id;
     GSList *doc_ids;
 } typedef term_docs_t;
 
-void read_doc_file(int, char*, GSList*);
-term_docs_t* generate_term_doc(char*, int); 
+void read_doc_file(int, int*, char*, GSList*);
+void generate_term_mapping(char*, int*); 
+term_docs_t* generate_term_doc(int, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 gint doc_sort_comparator(gconstpointer, gconstpointer);
 gint key_term_comparator(char*, term_docs_t*);
@@ -25,17 +26,23 @@ void clear_term_docs(GSList*);
 term_docs_t* bsearch_postings(char *, gpointer *, size_t,
         int(*compare)(char* key, term_docs_t* doc)); 
 
+GHashTable *term_map; 
+
 int
 main (int argc, char* argv[]) {
     int document_id_counter = 1;
+    int term_id_counter = 1;
 
     for (int i = 0; i <= BLOCKS; i++) {
         struct dirent *dp;
         DIR *dfd;
         g_print("Starting block %d:\n", i);
         g_print("\tAllocation Phase\n");
+        
+        GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+        term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+        
         GSList *term_doc_list;
-        GHashTable *doc_id_doc_name_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
         term_doc_list = NULL;
         term_doc_list = g_slist_alloc();
 
@@ -71,8 +78,8 @@ main (int argc, char* argv[]) {
                 int *doc_id = malloc(sizeof(int));
                 *doc_id = document_id_counter;
 
-                g_hash_table_insert(doc_id_doc_name_map, (gpointer) doc_id, g_strdup(filename_qfd));
-                read_doc_file(document_id_counter, filename_qfd, term_doc_list);
+                g_hash_table_insert(doc_map, (gpointer) doc_id, g_strdup(filename_qfd));
+                read_doc_file(document_id_counter, &term_id_counter, filename_qfd, term_doc_list);
                 document_id_counter++;
             }
         }
@@ -86,8 +93,9 @@ main (int argc, char* argv[]) {
         g_print("\tCleanup Phase\n");
         for_each_list_item(term_doc_list, clear_term_docs);
         g_slist_free(term_doc_list);
-        g_hash_table_remove_all(doc_id_doc_name_map);
-        g_hash_table_destroy(doc_id_doc_name_map);
+        g_hash_table_remove_all(doc_map);
+        g_hash_table_destroy(doc_map);
+        g_hash_table_destroy(term_map);
     } 
 
     return 0;
@@ -115,7 +123,7 @@ bsearch_postings (char *key, gpointer *array, size_t num,
 }
 
 void
-read_doc_file(int doc_id, char* path, GSList *list) {
+read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
     int c;
     FILE *file;
     file = fopen(path, "r");
@@ -123,24 +131,34 @@ read_doc_file(int doc_id, char* path, GSList *list) {
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
-            list = g_slist_insert(list, generate_term_doc(term->str, doc_id), 1);
+            generate_term_mapping(term->str, term_id_counter); 
+            list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
             g_string_free(term, TRUE);
             term = g_string_new("");
             continue;
         }
         g_string_append_c(term, (char)c);
     }
-
-    list = g_slist_insert(list, generate_term_doc(term->str, doc_id), 1);
+    
+    generate_term_mapping(term->str, term_id_counter); 
+    list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
     g_string_free(term, TRUE);
 
     fclose(file);
 }
 
+void
+generate_term_mapping(char* term, int* term_id_counter) {
+    (*term_id_counter)++;
+    int *term_id = malloc(sizeof(int));
+    *term_id = *term_id_counter;
+    g_hash_table_insert(term_map, term_id, g_strdup(term));
+}
+
 term_docs_t*
-generate_term_doc(char* term, int doc_id) {
+generate_term_doc(int term_id, int doc_id) {
     term_docs_t *t_doc = malloc(sizeof(term_docs_t));
-    t_doc->term = g_string_new(g_strstrip(term));
+    t_doc->term_id = term_id;
     t_doc->doc_ids = NULL;
     t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(doc_id));
     return t_doc;
@@ -148,7 +166,7 @@ generate_term_doc(char* term, int doc_id) {
 
 gint
 key_term_comparator(char* key, term_docs_t* term_doc) {
-    return g_ascii_strcasecmp(key, term_doc->term->str);
+    return g_ascii_strcasecmp(key, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
 }
 
 gint
@@ -157,7 +175,10 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
     term_docs_t* term_doc_2 = (term_docs_t*) item2; 
     if (term_doc_1 != NULL && term_doc_2 != NULL) {
         // CASE: Normal case
-        return g_ascii_strcasecmp(term_doc_1->term->str, term_doc_2->term->str);
+        char* term1 = (char *)g_hash_table_lookup(term_map, &term_doc_1->term_id); 
+        char* term2 = (char *)g_hash_table_lookup(term_map, &term_doc_2->term_id); 
+
+        return g_ascii_strcasecmp(term1, term2);
     }
 
     // CASE: Initial allocation of the list where data = NULL.
@@ -184,7 +205,7 @@ for_each_list_item(GSList *list, void (*action)(GSList *list)) {
 void
 display_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
-    g_print("term = %s, doc = ", term_doc->term->str);
+    g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
     GSList *next = term_doc->doc_ids;
     g_print("%d ", GPOINTER_TO_INT(next->data));
 
@@ -227,7 +248,6 @@ collect_term_docs(GSList *node) {
 void
 clear_term_docs(GSList *node) {
     term_docs_t* term_docs = (term_docs_t *)node->data;
-    g_string_free(term_docs->term, TRUE);
     g_slist_free(term_docs->doc_ids);
     g_free(term_docs);
 }
