@@ -32,6 +32,8 @@ int
 main (int argc, char* argv[]) {
     int document_id_counter = 1;
     int term_id_counter = 1;
+    
+    GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
 
     for (int i = 0; i <= BLOCKS; i++) {
         struct dirent *dp;
@@ -39,7 +41,6 @@ main (int argc, char* argv[]) {
         g_print("Starting block %d:\n", i);
         g_print("\tAllocation Phase\n");
         
-        GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
         term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
         
         GSList *term_doc_list;
@@ -121,11 +122,114 @@ main (int argc, char* argv[]) {
         g_print("\tCleanup Phase\n");
         for_each_list_item(term_doc_list, clear_term_docs);
         g_slist_free(term_doc_list);
-        g_hash_table_remove_all(doc_map);
-        g_hash_table_destroy(doc_map);
-        g_hash_table_destroy(term_map);
     } 
+    
+    g_print("\tMerge Phase\n");
+    // Open all intermediate files for reading.
+    FILE* block_intermediate_fp[BLOCKS];
+    for (int i = 0; i <= BLOCKS; i++) {
+        char i_file_path[MAX_DOC_TITLE_LENGTH];
+        sprintf(i_file_path, "./intermediates/%d.intermediate", i);
 
+        block_intermediate_fp[i] = fopen(i_file_path, "r");
+        if (block_intermediate_fp[i] == NULL) {
+            g_print("Could not open intermediate file.");
+            return -1;
+        }
+    }
+
+    // Open index file for writing.
+    FILE* index_fp;
+    index_fp = fopen("index", "w");
+    if (index_fp == NULL) {
+        g_print("Could not open index file for writing.");
+        return -1;
+    }
+    
+    while(1) {
+        GSList *postings;
+        postings = NULL;
+        postings = g_slist_alloc();
+
+        for (int i = 0; i <= BLOCKS; i++) {
+            // If the file has more to read then read
+            if (block_intermediate_fp[i] != NULL) {
+                int c;
+                int state = 0;
+                term_docs_t *t_doc = malloc(sizeof(term_docs_t));
+                t_doc->doc_ids = NULL;
+
+                GString* temp = g_string_new("");
+                while ((c = getc(block_intermediate_fp[i])) != EOF) {
+                    if (c == '\n') {
+                        break;
+                    }
+                    // Try to build a postings object
+                    if (state == 0) {
+                        // When state is 0, we are reading the term id in.
+                        if (c != '|') {
+                            g_string_append_c(temp, c);
+                        }
+                        else {
+                            // End of this state.
+                            t_doc->term_id = atoi(temp->str);
+                            g_string_free(temp, TRUE);
+                            temp = g_string_new("");
+                            state++;
+                        }
+                    }
+                    else if (state == 1) {
+                        if (c != ',') {
+                            g_string_append_c(temp, c);
+                        }
+                        else {
+                            int result = 0;
+                            result = atoi(temp->str);
+                            g_string_free(temp, TRUE);
+                            t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
+                        }
+                    }
+                }
+
+                // Term document mapping has been serialised
+                // Add to the postings list in sorted order in favour of smallest term_id first.
+                // We will be using this singly linked list as a priority queue.
+                postings = g_slist_insert_sorted(postings, t_doc, (GCompareFunc)term_sort_comparator);
+
+                if (c == EOF) {
+                    // Mark the file as unsafe for future reading
+                    fclose(block_intermediate_fp[i]);
+                    block_intermediate_fp[i] = NULL;
+                }
+            }
+        }
+
+        for_each_list_item(postings, collect_term_docs);
+        GSList *node = postings;
+
+        while ((node = node->next) != NULL) {
+            term_docs_t* term_doc = (term_docs_t*) node->data; 
+            fprintf(index_fp, "%d|", term_doc->term_id);
+            GSList *next = term_doc->doc_ids;
+            fprintf(index_fp, "%d", GPOINTER_TO_INT(next->data));
+
+            while ((next = next->next) != NULL) {
+                fprintf(index_fp, ",%d", GPOINTER_TO_INT(next->data));
+            }
+            fprintf(index_fp, "\n");
+        }
+    }
+    
+    // Clean up files.
+    for (int i = 0; i <= BLOCKS; i++) {
+        if (block_intermediate_fp[i] != NULL) {
+            fclose(block_intermediate_fp[i]);
+        }
+    }
+    fclose(index_fp);
+
+    g_hash_table_destroy(doc_map);
+    g_hash_table_destroy(term_map);
     return 0;
 }
 term_docs_t *
