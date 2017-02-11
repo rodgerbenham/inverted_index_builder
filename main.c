@@ -1,16 +1,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#define DOCUMENT_COUNT 4
-#define MAX_DOC_PATH 20
+#define BLOCKS 0
+#define MAX_DOC_TITLE_LENGTH 150
 
 struct TermDocs {
     GString *term;
     GSList *doc_ids;
 } typedef term_docs_t;
 
-void get_doc_path(int, char*);
 void read_doc_file(int, char*, GSList*);
 term_docs_t* generate_term_doc(char*, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
@@ -25,54 +27,65 @@ term_docs_t* bsearch_postings(char *, gpointer *, size_t,
 
 int
 main (int argc, char* argv[]) {
-    GSList *termDocList;
-    termDocList = NULL;
-    termDocList = g_slist_alloc();
-    for (int i = 1; i <= DOCUMENT_COUNT; i++) {
-        char path[MAX_DOC_PATH];
+    int document_id_counter = 1;
 
-        get_doc_path(i, path);
-        read_doc_file(i, path, termDocList);
-    }
+    for (int i = 0; i <= BLOCKS; i++) {
+        struct dirent *dp;
+        DIR *dfd;
+        g_print("Starting block %d:\n", i);
+        g_print("\tAllocation Phase\n");
+        GSList *term_doc_list;
+        GHashTable *doc_id_doc_name_map = g_hash_table_new_full(g_int_hash, g_int_equal, free, g_free);
+        term_doc_list = NULL;
+        term_doc_list = g_slist_alloc();
 
-    g_print("%d items loaded\n", g_slist_length(termDocList));
-    g_print("=== Unsorted ===\n\n");
-    //for_each_list_item(termDocList, display_term_docs);
-    g_print("=== Sorted ===\n\n");
-    termDocList = g_slist_sort(termDocList, (GCompareFunc)term_sort_comparator);
-    //for_each_list_item(termDocList, display_term_docs);
-    g_print("=== Collect ===\n\n");
-    for_each_list_item(termDocList, collect_term_docs);
-    //for_each_list_item(termDocList, display_term_docs);
+        char dir[MAX_DOC_TITLE_LENGTH];
+        sprintf(dir, "./docs/%d", i);
+        
+        if ((dfd = opendir(dir)) == NULL)
+        {
+            fprintf(stderr, "Can't open %s\n", dir);
+            return -1;
+        }
 
-    g_print("=== Convert to array ===\n\n");
-    GPtrArray *postingsArray;
-    postingsArray = g_ptr_array_sized_new(g_slist_length(termDocList) - 1);
+        char filename_qfd[100] ;
 
-    int nIndex = 0;
-    GSList *node = termDocList;
+        g_print("\tDocument load phase\n");
+        while ((dp = readdir(dfd)) != NULL)
+        {
+            struct stat stbuf ;
+            sprintf(filename_qfd, "%s/%s", dir, dp->d_name) ;
+            if(stat(filename_qfd, &stbuf) == -1)
+            {
+                printf("Unable to stat file: %s\n",filename_qfd);
+                continue;
+            }
 
-    while ((node = node->next) != NULL) {
-        g_ptr_array_insert(postingsArray, nIndex, node->data);
-        nIndex++;
-    }
+            if ((stbuf.st_mode & S_IFMT) == S_IFDIR)
+            {
+                // Skip directories
+                continue;
+            }
+            else
+            {
+                int *doc_id = malloc(sizeof(int));
+                *doc_id = document_id_counter;
 
-    term_docs_t* td = bsearch_postings("hello", 
-            postingsArray->pdata, postingsArray->len,
-            key_term_comparator);
-
-    g_print("Query matches the following documents: ");
-    GSList *next = td->doc_ids;
-    g_print("%d ", GPOINTER_TO_INT(next->data));
-
-    while ((next = next->next) != NULL) {
-        g_print("%d ", GPOINTER_TO_INT(next->data));
-    }
-    g_print("\n");
-
-    for_each_list_item(termDocList, clear_term_docs);
-    g_slist_free(termDocList);
-    g_ptr_array_free(postingsArray, TRUE);
+                g_hash_table_insert(doc_id_doc_name_map, (gpointer) doc_id, g_string_new(filename_qfd));
+                read_doc_file(document_id_counter, filename_qfd, term_doc_list);
+                document_id_counter++;
+            }
+        }
+        g_print("\t%d terms loaded\n", g_slist_length(term_doc_list));
+        g_print("\tSorting Phase\n");
+        term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
+        g_print("\tCollect Phase\n");
+        for_each_list_item(term_doc_list, collect_term_docs);
+        g_print("\tClean up Phase\n");
+        for_each_list_item(term_doc_list, clear_term_docs);
+        g_slist_free(term_doc_list);
+        g_hash_table_destroy(doc_id_doc_name_map);
+    } 
 
     return 0;
 }
@@ -96,11 +109,6 @@ bsearch_postings (char *key, gpointer *array, size_t num,
     }
 
     return NULL;
-}
-
-void
-get_doc_path(int doc_id, char *path) {
-    sprintf(path, "./docs/doc%d", doc_id);
 }
 
 void
