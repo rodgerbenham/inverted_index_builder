@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 9
+#define BLOCKS 0
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
@@ -35,7 +35,7 @@ main (int argc, char* argv[]) {
         g_print("Starting block %d:\n", i);
         g_print("\tAllocation Phase\n");
         GSList *term_doc_list;
-        GHashTable *doc_id_doc_name_map = g_hash_table_new_full(g_int_hash, g_int_equal, free, g_free);
+        GHashTable *doc_id_doc_name_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
         term_doc_list = NULL;
         term_doc_list = g_slist_alloc();
 
@@ -71,19 +71,22 @@ main (int argc, char* argv[]) {
                 int *doc_id = malloc(sizeof(int));
                 *doc_id = document_id_counter;
 
-                g_hash_table_insert(doc_id_doc_name_map, (gpointer) doc_id, g_string_new(filename_qfd));
+                g_hash_table_insert(doc_id_doc_name_map, (gpointer) doc_id, g_strdup(filename_qfd));
                 read_doc_file(document_id_counter, filename_qfd, term_doc_list);
                 document_id_counter++;
             }
         }
+        closedir(dfd);
+
         g_print("\t%d terms loaded\n", g_slist_length(term_doc_list));
         g_print("\tSorting Phase\n");
         term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
         g_print("\tCollect Phase\n");
         for_each_list_item(term_doc_list, collect_term_docs);
-        g_print("\tClean up Phase\n");
+        g_print("\tCleanup Phase\n");
         for_each_list_item(term_doc_list, clear_term_docs);
         g_slist_free(term_doc_list);
+        g_hash_table_remove_all(doc_id_doc_name_map);
         g_hash_table_destroy(doc_id_doc_name_map);
     } 
 
