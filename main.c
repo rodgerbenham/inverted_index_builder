@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <glib.h>
 
-#define DOCUMENT_COUNT 9999
+#define DOCUMENT_COUNT 4
 #define MAX_DOC_PATH 20
 
 struct TermDocs {
