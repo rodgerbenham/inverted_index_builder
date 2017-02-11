@@ -5,8 +5,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 0
-#define MAX_DOC_TITLE_LENGTH 150
+#define BLOCKS 9
+#define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
     GString *term;
@@ -48,7 +48,7 @@ main (int argc, char* argv[]) {
             return -1;
         }
 
-        char filename_qfd[100] ;
+        char filename_qfd[MAX_DOC_TITLE_LENGTH] ;
 
         g_print("\tDocument load phase\n");
         while ((dp = readdir(dfd)) != NULL)
