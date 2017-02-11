@@ -1,4 +1,5 @@
 .tup/
 docs/
+intermediates/
 main
 main.dSYM/

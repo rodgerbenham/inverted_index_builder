@@ -90,6 +90,34 @@ main (int argc, char* argv[]) {
         term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
         g_print("\tCollect Phase\n");
         for_each_list_item(term_doc_list, collect_term_docs);
+        g_print("\tWrite Intermediate File Phase\n");
+        
+        char i_file_path[MAX_DOC_TITLE_LENGTH];
+        sprintf(i_file_path, "./intermediates/%d.intermediate", i);
+
+        FILE* i_fp; 
+        i_fp = fopen(i_file_path, "w");
+        if (i_fp == NULL) {
+            g_print("Could not open intermediate file.");
+            return -1;
+        }
+
+        GSList *node = term_doc_list;
+
+        while ((node = node->next) != NULL) {
+            term_docs_t* term_doc = (term_docs_t*) node->data; 
+            fprintf(i_fp, "%d|", term_doc->term_id);
+            GSList *next = term_doc->doc_ids;
+            fprintf(i_fp, "%d", GPOINTER_TO_INT(next->data));
+
+            while ((next = next->next) != NULL) {
+                fprintf(i_fp, ",%d", GPOINTER_TO_INT(next->data));
+            }
+            fprintf(i_fp, "\n");
+        }
+
+        fclose(i_fp);
+
         g_print("\tCleanup Phase\n");
         for_each_list_item(term_doc_list, clear_term_docs);
         g_slist_free(term_doc_list);
