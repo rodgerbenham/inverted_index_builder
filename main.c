@@ -30,18 +30,17 @@ GHashTable *term_map;
 
 int
 main (int argc, char* argv[]) {
-    int document_id_counter = 1;
-    int term_id_counter = 1;
+    int document_id_counter = 0;
+    int term_id_counter = 0;
     
     GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+    term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
 
     for (int i = 0; i <= BLOCKS; i++) {
         struct dirent *dp;
         DIR *dfd;
         g_print("Starting block %d:\n", i);
         g_print("\tAllocation Phase\n");
-        
-        term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
         
         GSList *term_doc_list;
         term_doc_list = NULL;
@@ -76,12 +75,12 @@ main (int argc, char* argv[]) {
             }
             else
             {
+                document_id_counter++;
                 int *doc_id = malloc(sizeof(int));
                 *doc_id = document_id_counter;
 
                 g_hash_table_insert(doc_map, (gpointer) doc_id, g_strdup(filename_qfd));
                 read_doc_file(document_id_counter, &term_id_counter, filename_qfd, term_doc_list);
-                document_id_counter++;
             }
         }
         closedir(dfd);
@@ -120,8 +119,8 @@ main (int argc, char* argv[]) {
         fclose(i_fp);
 
         g_print("\tCleanup Phase\n");
-        //for_each_list_item(term_doc_list, clear_term_docs);
-        //g_slist_free(term_doc_list);
+        for_each_list_item(term_doc_list, clear_term_docs);
+        g_slist_free(term_doc_list);
     } 
     
     g_print("\tMerge Phase\n");
@@ -149,10 +148,13 @@ main (int argc, char* argv[]) {
     while(1) {
         GSList *postings;
         postings = NULL;
+        postings = g_slist_alloc();
 
         for (int i = 0; i <= BLOCKS; i++) {
             // If the file has more to read then read
             if (block_intermediate_fp[i] != NULL) {
+                g_print("Begun reading data for block %d\n", i);
+
                 int c;
                 int state = 0;
                 term_docs_t *t_doc = malloc(sizeof(term_docs_t));
@@ -164,7 +166,6 @@ main (int argc, char* argv[]) {
                         int result = 0;
                         result = atoi(temp->str);
                         g_string_free(temp, TRUE);
-                        g_print("Section 1\n");
                         g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
                         t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         break;
@@ -192,7 +193,6 @@ main (int argc, char* argv[]) {
                             result = atoi(temp->str);
                             g_string_free(temp, TRUE);
                             temp = g_string_new("");
-                            g_print("Section 2\n");
                             g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
                             t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         }
@@ -202,7 +202,7 @@ main (int argc, char* argv[]) {
                 // Term document mapping has been serialised
                 // Add to the postings list in sorted order in favour of smallest term_id first.
                 // We will be using this singly linked list as a priority queue.
-                postings = g_slist_insert_sorted(postings, t_doc, (GCompareFunc)term_sort_comparator);
+                postings = g_slist_insert(postings, t_doc, 1);
 
                 if (c == EOF) {
                     // Mark the file as unsafe for future reading
@@ -213,27 +213,35 @@ main (int argc, char* argv[]) {
             }
         }
 
-        if (g_slist_length(postings) == 0) {
+        if (g_slist_length(postings) == 1) {
             g_print("No more postings to process\n");
             break;
         }
 
+        g_print("Postings count before collect: %d\n", g_slist_length(postings));
+        postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
+
+        //for_each_list_item(postings, display_term_docs);
         for_each_list_item(postings, collect_term_docs);
+        g_print("Postings count after collect: %d\n", g_slist_length(postings));
+        //for_each_list_item(postings, display_term_docs);
+
         GSList *node = postings;
 
         while ((node = node->next) != NULL) {
             term_docs_t* term_doc = (term_docs_t*) node->data; 
+            if (term_doc->term_id == 0) {
+                break;
+            }
             fprintf(index_fp, "%d|", term_doc->term_id);
             GSList *next = term_doc->doc_ids;
             if (next == NULL) {
                 g_print("next was null\n");
                 break;
             }
-            g_print("Resulting in = %d\n", GPOINTER_TO_INT(next->data));
             fprintf(index_fp, "%d", GPOINTER_TO_INT(next->data));
 
             while ((next = next->next) != NULL) {
-            g_print("Resulting in = %d\n", GPOINTER_TO_INT(next->data));
                 fprintf(index_fp, ",%d", GPOINTER_TO_INT(next->data));
             }
             fprintf(index_fp, "\n");
@@ -284,7 +292,6 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
             generate_term_mapping(term->str, term_id_counter); 
-            g_print("Insert Term %d, %s\n", *term_id_counter, (char*)g_hash_table_lookup(term_map, term_id_counter));
             list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
             g_string_free(term, TRUE);
             term = g_string_new("");
@@ -304,9 +311,8 @@ void
 generate_term_mapping(char* term, int* term_id_counter) {
     (*term_id_counter)++;
     int *term_id = malloc(sizeof(int));
-    // TODO: This seems to be freeing
     *term_id = *term_id_counter;
-    g_hash_table_insert(term_map, term_id, g_strdup(term));
+    g_hash_table_insert(term_map, term_id, g_strdup(g_strstrip(term)));
 }
 
 term_docs_t*
@@ -332,7 +338,9 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
         char* term1 = (char *)g_hash_table_lookup(term_map, &term_doc_1->term_id); 
         char* term2 = (char *)g_hash_table_lookup(term_map, &term_doc_2->term_id); 
 
-        return g_ascii_strcasecmp(term1, term2);
+        if (term1 != NULL && term2 != NULL) {
+            return g_ascii_strcasecmp(term1, term2);
+        }
     }
 
     // CASE: Initial allocation of the list where data = NULL.
@@ -359,21 +367,25 @@ for_each_list_item(GSList *list, void (*action)(GSList *list)) {
 void
 display_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
-    g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
-    GSList *next = term_doc->doc_ids;
-    g_print("%d ", GPOINTER_TO_INT(next->data));
-
-    while ((next = next->next) != NULL) {
+    if (term_doc != NULL) {
+        g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
+        GSList *next = term_doc->doc_ids;
         g_print("%d ", GPOINTER_TO_INT(next->data));
+
+        while ((next = next->next) != NULL) {
+            g_print("%d ", GPOINTER_TO_INT(next->data));
+        }
+        g_print("\n");
     }
-    g_print("\n");
 }
 
 void
 collect_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
     GSList* next = NULL; 
+    g_print("Is null?\n");
     while ((next = node->next) != NULL) {
+        g_print("Not null!\n");
         term_docs_t* next_term_doc = NULL; 
         next_term_doc = (term_docs_t*) next->data;
         if (term_sort_comparator(term_doc, next_term_doc) == 0) {
