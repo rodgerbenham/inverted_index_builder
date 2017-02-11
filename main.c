@@ -120,8 +120,8 @@ main (int argc, char* argv[]) {
         fclose(i_fp);
 
         g_print("\tCleanup Phase\n");
-        for_each_list_item(term_doc_list, clear_term_docs);
-        g_slist_free(term_doc_list);
+        //for_each_list_item(term_doc_list, clear_term_docs);
+        //g_slist_free(term_doc_list);
     } 
     
     g_print("\tMerge Phase\n");
@@ -149,7 +149,6 @@ main (int argc, char* argv[]) {
     while(1) {
         GSList *postings;
         postings = NULL;
-        postings = g_slist_alloc();
 
         for (int i = 0; i <= BLOCKS; i++) {
             // If the file has more to read then read
@@ -162,6 +161,12 @@ main (int argc, char* argv[]) {
                 GString* temp = g_string_new("");
                 while ((c = getc(block_intermediate_fp[i])) != EOF) {
                     if (c == '\n') {
+                        int result = 0;
+                        result = atoi(temp->str);
+                        g_string_free(temp, TRUE);
+                        g_print("Section 1\n");
+                        g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
+                        t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         break;
                     }
                     // Try to build a postings object
@@ -186,6 +191,9 @@ main (int argc, char* argv[]) {
                             int result = 0;
                             result = atoi(temp->str);
                             g_string_free(temp, TRUE);
+                            temp = g_string_new("");
+                            g_print("Section 2\n");
+                            g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
                             t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         }
                     }
@@ -200,8 +208,14 @@ main (int argc, char* argv[]) {
                     // Mark the file as unsafe for future reading
                     fclose(block_intermediate_fp[i]);
                     block_intermediate_fp[i] = NULL;
+                    g_print("Block has been marked as finished reading\n");
                 }
             }
+        }
+
+        if (g_slist_length(postings) == 0) {
+            g_print("No more postings to process\n");
+            break;
         }
 
         for_each_list_item(postings, collect_term_docs);
@@ -211,9 +225,15 @@ main (int argc, char* argv[]) {
             term_docs_t* term_doc = (term_docs_t*) node->data; 
             fprintf(index_fp, "%d|", term_doc->term_id);
             GSList *next = term_doc->doc_ids;
+            if (next == NULL) {
+                g_print("next was null\n");
+                break;
+            }
+            g_print("Resulting in = %d\n", GPOINTER_TO_INT(next->data));
             fprintf(index_fp, "%d", GPOINTER_TO_INT(next->data));
 
             while ((next = next->next) != NULL) {
+            g_print("Resulting in = %d\n", GPOINTER_TO_INT(next->data));
                 fprintf(index_fp, ",%d", GPOINTER_TO_INT(next->data));
             }
             fprintf(index_fp, "\n");
@@ -264,6 +284,7 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
             generate_term_mapping(term->str, term_id_counter); 
+            g_print("Insert Term %d, %s\n", *term_id_counter, (char*)g_hash_table_lookup(term_map, term_id_counter));
             list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
             g_string_free(term, TRUE);
             term = g_string_new("");
@@ -283,6 +304,7 @@ void
 generate_term_mapping(char* term, int* term_id_counter) {
     (*term_id_counter)++;
     int *term_id = malloc(sizeof(int));
+    // TODO: This seems to be freeing
     *term_id = *term_id_counter;
     g_hash_table_insert(term_map, term_id, g_strdup(term));
 }
