@@ -123,7 +123,7 @@ main (int argc, char* argv[]) {
         g_slist_free(term_doc_list);
     } 
     
-    g_print("\tMerge Phase\n");
+    g_print("Merge Phase\n");
     // Open all intermediate files for reading.
     FILE* block_intermediate_fp[BLOCKS];
     for (int i = 0; i <= BLOCKS; i++) {
@@ -153,8 +153,6 @@ main (int argc, char* argv[]) {
         for (int i = 0; i <= BLOCKS; i++) {
             // If the file has more to read then read
             if (block_intermediate_fp[i] != NULL) {
-                g_print("Begun reading data for block %d\n", i);
-
                 int c;
                 int state = 0;
                 term_docs_t *t_doc = malloc(sizeof(term_docs_t));
@@ -166,7 +164,6 @@ main (int argc, char* argv[]) {
                         int result = 0;
                         result = atoi(temp->str);
                         g_string_free(temp, TRUE);
-                        g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
                         t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         break;
                     }
@@ -193,7 +190,6 @@ main (int argc, char* argv[]) {
                             result = atoi(temp->str);
                             g_string_free(temp, TRUE);
                             temp = g_string_new("");
-                            g_print("Block %d, Term %d, %s\n", i, t_doc->term_id, (char*)g_hash_table_lookup(term_map, &t_doc->term_id));
                             t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
                         }
                     }
@@ -208,7 +204,7 @@ main (int argc, char* argv[]) {
                     // Mark the file as unsafe for future reading
                     fclose(block_intermediate_fp[i]);
                     block_intermediate_fp[i] = NULL;
-                    g_print("Block has been marked as finished reading\n");
+                    g_print("Block %d finished processing.\n", i);
                 }
             }
         }
@@ -218,13 +214,8 @@ main (int argc, char* argv[]) {
             break;
         }
 
-        g_print("Postings count before collect: %d\n", g_slist_length(postings));
         postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
-
-        //for_each_list_item(postings, display_term_docs);
         for_each_list_item(postings, collect_term_docs);
-        g_print("Postings count after collect: %d\n", g_slist_length(postings));
-        //for_each_list_item(postings, display_term_docs);
 
         GSList *node = postings;
 
