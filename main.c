@@ -211,6 +211,8 @@ main (int argc, char* argv[]) {
 
         if (g_slist_length(postings) == 1) {
             g_print("No more postings to process\n");
+            for_each_list_item(postings, clear_term_docs);
+            g_slist_free(postings);
             break;
         }
 
@@ -237,6 +239,9 @@ main (int argc, char* argv[]) {
             }
             fprintf(index_fp, "\n");
         }
+
+        for_each_list_item(postings, clear_term_docs);
+        g_slist_free(postings);
     }
     
     // Clean up files.
