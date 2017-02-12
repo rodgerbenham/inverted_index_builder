@@ -15,7 +15,7 @@ struct TermDocs {
 
 void write_mapping(gpointer, gpointer, gpointer);
 void read_doc_file(int, int*, char*, GSList*);
-void generate_term_mapping(char*, int*); 
+int generate_term_mapping(char*, int*); 
 term_docs_t* generate_term_doc(int, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 gint doc_sort_comparator(gconstpointer, gconstpointer);
@@ -27,7 +27,8 @@ void clear_term_docs(GSList*);
 term_docs_t* bsearch_postings(char *, gpointer *, size_t,
         int(*compare)(char* key, term_docs_t* doc)); 
 
-GHashTable *term_map; 
+GHashTable *id_to_term_map; 
+GHashTable *term_to_id_map; 
 
 int
 main (int argc, char* argv[]) {
@@ -35,7 +36,8 @@ main (int argc, char* argv[]) {
     int term_id_counter = 0;
     
     GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
-    term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+    id_to_term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+    term_to_id_map = g_hash_table_new(g_int_hash, g_int_equal);
 
     for (int i = 0; i <= BLOCKS; i++) {
         struct dirent *dp;
@@ -267,14 +269,16 @@ main (int argc, char* argv[]) {
         return -1;
     }
 
-    g_hash_table_foreach(term_map, (GHFunc)write_mapping, term_fp);
+    g_hash_table_foreach(id_to_term_map, (GHFunc)write_mapping, term_fp);
     g_hash_table_foreach(doc_map, (GHFunc)write_mapping, doc_fp);
 
     fclose(term_fp);
     fclose(doc_fp);
 
     g_hash_table_destroy(doc_map);
-    g_hash_table_destroy(term_map);
+    g_hash_table_destroy(id_to_term_map);
+    g_hash_table_destroy(term_to_id_map);
+
     return 0;
 }
 
@@ -317,8 +321,8 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
-            generate_term_mapping(term->str, term_id_counter); 
-            list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
+            int term_id = generate_term_mapping(term->str, term_id_counter); 
+            list = g_slist_insert(list, generate_term_doc(term_id, doc_id), 1);
             g_string_free(term, TRUE);
             term = g_string_new("");
             continue;
@@ -326,19 +330,26 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
         g_string_append_c(term, (char)c);
     }
     
-    generate_term_mapping(term->str, term_id_counter); 
-    list = g_slist_insert(list, generate_term_doc(*term_id_counter, doc_id), 1);
+    int term_id = generate_term_mapping(term->str, term_id_counter); 
+    list = g_slist_insert(list, generate_term_doc(term_id, doc_id), 1);
     g_string_free(term, TRUE);
 
     fclose(file);
 }
 
-void
+int
 generate_term_mapping(char* term, int* term_id_counter) {
+    int *term_id;
+    if ((term_id = g_hash_table_lookup(term_to_id_map, term)) != NULL) {
+        return *term_id;
+    }
     (*term_id_counter)++;
-    int *term_id = malloc(sizeof(int));
+    term_id = malloc(sizeof(int));
     *term_id = *term_id_counter;
-    g_hash_table_insert(term_map, term_id, g_strdup(g_strstrip(term)));
+    char *term_ptr = g_strdup(g_strstrip(term));
+    g_hash_table_insert(id_to_term_map, term_id, term_ptr);
+    g_hash_table_insert(term_to_id_map, term_ptr, term_id);
+    return *term_id;
 }
 
 term_docs_t*
@@ -352,7 +363,7 @@ generate_term_doc(int term_id, int doc_id) {
 
 gint
 key_term_comparator(char* key, term_docs_t* term_doc) {
-    return g_ascii_strcasecmp(key, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
+    return g_ascii_strcasecmp(key, (char *)g_hash_table_lookup(id_to_term_map, &term_doc->term_id));
 }
 
 gint
@@ -361,8 +372,8 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
     term_docs_t* term_doc_2 = (term_docs_t*) item2; 
     if (term_doc_1 != NULL && term_doc_2 != NULL) {
         // CASE: Normal case
-        char* term1 = (char *)g_hash_table_lookup(term_map, &term_doc_1->term_id); 
-        char* term2 = (char *)g_hash_table_lookup(term_map, &term_doc_2->term_id); 
+        char* term1 = (char *)g_hash_table_lookup(id_to_term_map, &term_doc_1->term_id); 
+        char* term2 = (char *)g_hash_table_lookup(id_to_term_map, &term_doc_2->term_id); 
 
         if (term1 != NULL && term2 != NULL) {
             return g_ascii_strcasecmp(term1, term2);
@@ -394,7 +405,7 @@ void
 display_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
     if (term_doc != NULL) {
-        g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(term_map, &term_doc->term_id));
+        g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(id_to_term_map, &term_doc->term_id));
         GSList *next = term_doc->doc_ids;
         g_print("%d ", GPOINTER_TO_INT(next->data));
 
