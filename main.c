@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 1
+#define BLOCKS 9
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
@@ -383,9 +383,7 @@ void
 collect_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
     GSList* next = NULL; 
-    g_print("Is null?\n");
     while ((next = node->next) != NULL) {
-        g_print("Not null!\n");
         term_docs_t* next_term_doc = NULL; 
         next_term_doc = (term_docs_t*) next->data;
         if (term_sort_comparator(term_doc, next_term_doc) == 0) {
