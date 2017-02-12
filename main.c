@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 9
+#define BLOCKS 1
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
@@ -13,6 +13,7 @@ struct TermDocs {
     GSList *doc_ids;
 } typedef term_docs_t;
 
+void write_mapping(gpointer, gpointer, gpointer);
 void read_doc_file(int, int*, char*, GSList*);
 void generate_term_mapping(char*, int*); 
 term_docs_t* generate_term_doc(int, int); 
@@ -139,7 +140,7 @@ main (int argc, char* argv[]) {
 
     // Open index file for writing.
     FILE* index_fp;
-    index_fp = fopen("index", "w");
+    index_fp = fopen("posting.dict", "w");
     if (index_fp == NULL) {
         g_print("Could not open index file for writing.");
         return -1;
@@ -252,10 +253,39 @@ main (int argc, char* argv[]) {
     }
     fclose(index_fp);
 
+    FILE* term_fp;
+    term_fp = fopen("term.dict", "w");
+    if (term_fp == NULL) {
+        g_print("Could not open term file for writing.");
+        return -1;
+    }
+
+    FILE* doc_fp;
+    doc_fp = fopen("doc.dict", "w");
+    if (doc_fp == NULL) {
+        g_print("Could not open docs file for writing.");
+        return -1;
+    }
+
+    g_hash_table_foreach(term_map, (GHFunc)write_mapping, term_fp);
+    g_hash_table_foreach(doc_map, (GHFunc)write_mapping, doc_fp);
+
+    fclose(term_fp);
+    fclose(doc_fp);
+
     g_hash_table_destroy(doc_map);
     g_hash_table_destroy(term_map);
     return 0;
 }
+
+void
+write_mapping(gpointer key, gpointer value, gpointer file) {
+    FILE *fp = (FILE*)file;
+    int *termId = (int*)key;
+    char *termValue = (char*)value;
+    fprintf(fp, "%d|%s\n", *termId, value);
+}
+
 term_docs_t *
 bsearch_postings (char *key, gpointer *array, size_t num,
         int(*compare)(char* key, term_docs_t* doc)) {
