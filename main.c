@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 1
+#define BLOCKS 2
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
@@ -229,7 +229,7 @@ main (int argc, char* argv[]) {
 
         while ((node = node->next) != NULL) {
             term_docs_t* term_doc = (term_docs_t*) node->data; 
-            if (term_doc->term_id == 0) {
+            if (g_hash_table_lookup(id_to_term_map, &term_doc->term_id) == NULL) {
                 break;
             }
             fprintf(index_fp, "%d|", term_doc->term_id);
@@ -290,7 +290,7 @@ write_mapping(gpointer key, gpointer value, gpointer file) {
     FILE *fp = (FILE*)file;
     int *termId = (int*)key;
     char *termValue = (char*)value;
-    fprintf(fp, "%d|%s\n", *termId, value);
+    fprintf(fp, "%d|%s\n", *termId, termValue);
 }
 
 term_docs_t *
@@ -347,6 +347,7 @@ generate_term_mapping(char* term, int* term_id_counter) {
         return *term_id;
     }
     (*term_id_counter)++;
+    g_print("term id added to = %d", *term_id_counter);
     term_id = malloc(sizeof(int));
     *term_id = *term_id_counter;
     char *term_ptr = g_strdup(g_strstrip(term));
