@@ -93,6 +93,7 @@ main (int argc, char* argv[]) {
         g_print("\t%d terms loaded\n", g_slist_length(term_doc_list));
         g_print("\tSorting Phase\n");
         term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
+        for_each_list_item(term_doc_list, display_term_docs);
         g_print("\tCollect Phase\n");
         for_each_list_item(term_doc_list, collect_term_docs);
         for_each_list_item(term_doc_list, display_term_docs);
@@ -157,72 +158,13 @@ main (int argc, char* argv[]) {
         postings = g_slist_alloc();
 
         for (int i = 0; i <= BLOCKS; i++) {
-            // If the file has more to read then read
             if (block_intermediate_fp[i] != NULL) {
-                int c;
-                int state = 0;
-                term_docs_t *t_doc = malloc(sizeof(term_docs_t));
-                t_doc->doc_ids = NULL;
-
-                GString* temp = g_string_new("");
-                while ((c = getc(block_intermediate_fp[i])) != EOF) {
-                    if (c == '\n') {
-                        int result = 0;
-                        result = atoi(temp->str);
-                        g_string_free(temp, TRUE);
-                        t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
-                        break;
-                    }
-                    // Try to build a postings object
-                    if (state == 0) {
-                        // When state is 0, we are reading the term id in.
-                        if (c != '|') {
-                            g_string_append_c(temp, c);
-                        }
-                        else {
-                            // End of this state.
-                            t_doc->term_id = atoi(temp->str);
-                            g_string_free(temp, TRUE);
-                            temp = g_string_new("");
-                            state++;
-                        }
-                    }
-                    else if (state == 1) {
-                        if (c != ',') {
-                            g_string_append_c(temp, c);
-                        }
-                        else {
-                            int result = 0;
-                            result = atoi(temp->str);
-                            g_string_free(temp, TRUE);
-                            temp = g_string_new("");
-                            t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
-                        }
-                    }
-                }
-
-                // Term document mapping has been serialised
-                // Add to the postings list in sorted order in favour of smallest term_id first.
-                // We will be using this singly linked list as a priority queue.
-
-                // If the term_doc generated is invalid, free it
-                // and don't add it to the collection.
-                if (g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(t_doc->term_id)) == NULL) {
-                    g_slist_free(t_doc->doc_ids);
-                    g_free(t_doc);
-                }
-                else {
+                term_doc_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], false); 
+                if (t_doc != NULL) {
                     postings = g_slist_insert(postings, t_doc, 1);
                     g_print("Add posting (block %d)\n", i);
                     postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
                     for_each_list_item(postings, display_term_docs);
-                }
-
-                if (c == EOF) {
-                    // Mark the file as unsafe for future reading
-                    fclose(block_intermediate_fp[i]);
-                    block_intermediate_fp[i] = NULL;
-                    g_print("Block %d finished processing.\n", i);
                 }
             }
         }
@@ -299,6 +241,77 @@ main (int argc, char* argv[]) {
     g_hash_table_destroy(term_to_id_map);
 
     return 0;
+}
+
+term_doc_t*
+deserialize_term_doc(FILE* file, bool peek) {
+    int c;
+    int state = 0;
+    long int peek_counter = 0;
+
+    if (peek) {
+        peek_counter = ftell(file);
+    }
+
+    term_docs_t *t_doc = malloc(sizeof(term_docs_t));
+    t_doc->doc_ids = NULL;
+
+    GString* temp = g_string_new("");
+    while ((c = getc(file)) != EOF) {
+
+        if (c == '\n') {
+            int result = 0;
+            result = atoi(temp->str);
+            g_string_free(temp, TRUE);
+            t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
+            break;
+        }
+        // Try to build a postings object
+        if (state == 0) {
+            // When state is 0, we are reading the term id in.
+            if (c != '|') {
+                g_string_append_c(temp, c);
+            }
+            else {
+                // End of this state.
+                t_doc->term_id = atoi(temp->str);
+                g_string_free(temp, TRUE);
+                temp = g_string_new("");
+                state++;
+            }
+        }
+        else if (state == 1) {
+            if (c != ',') {
+                g_string_append_c(temp, c);
+            }
+            else {
+                int result = 0;
+                result = atoi(temp->str);
+                g_string_free(temp, TRUE);
+                temp = g_string_new("");
+                t_doc->doc_ids = g_slist_append(t_doc->doc_ids, GINT_TO_POINTER(result));
+            }
+        }
+    }
+    
+    if (peek) {
+        fseek(file, peek_counter, SEEK_SET);
+    }
+
+    if (g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(t_doc->term_id)) == NULL) {
+        g_slist_free(t_doc->doc_ids);
+        g_free(t_doc);
+        t_doc = NULL;
+    }
+
+    if (c == EOF && !peek) {
+        // Mark the file as unsafe for future reading
+        fclose(file);
+        file = NULL;
+        g_print("Block finished processing.\n");
+    }
+
+    return t_doc;
 }
 
 void
@@ -391,7 +404,12 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
     term_docs_t* term_doc_2 = (term_docs_t*) item2; 
     if (term_doc_1 != NULL && term_doc_2 != NULL) {
         // CASE: Normal case
-        return term_doc_1->term_id - term_doc_2->term_id;
+        char* term1 = (char*)g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(term_doc_1->term_id));
+        char* term2 = (char*)g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(term_doc_2->term_id));
+
+        if (term1 != NULL && term2 != NULL) {
+            return g_ascii_strcasecmp(term1, term2);
+        }
     }
 
     // CASE: Initial allocation of the list where data = NULL.
