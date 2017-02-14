@@ -89,15 +89,11 @@ main (int argc, char* argv[]) {
         }
         closedir(dfd);
 
-        for_each_list_item(term_doc_list, display_term_docs);
-
         g_print("\t%d terms loaded\n", g_slist_length(term_doc_list));
         g_print("\tSorting Phase\n");
         term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
-        for_each_list_item(term_doc_list, display_term_docs);
         g_print("\tCollect Phase\n");
         for_each_list_item(term_doc_list, collect_term_docs);
-        for_each_list_item(term_doc_list, display_term_docs);
         g_print("\tWrite Intermediate File Phase\n");
         
         char i_file_path[MAX_DOC_TITLE_LENGTH];
@@ -187,17 +183,13 @@ main (int argc, char* argv[]) {
                 }
             }
         }
-        g_print("\tPeek phase\n");
         if (g_slist_length(postings) == 1) {
-            g_print("No more data\n");
+            g_print("No more postings lists to merge\n");
             break;
         }
         postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
-        for_each_list_item(postings, display_term_docs);
 
-        g_print("\tGet the smallest term id\n");
         int smallest_term_id = ((term_docs_t*)(g_slist_nth(postings, 1)->data))->term_id;
-        g_print("\tSmallest term id = %d\n", smallest_term_id);
         
         // We have the smallest term id now. So let's get all term_docs without peeking.
         for_each_list_item(postings, clear_term_docs);
@@ -219,12 +211,7 @@ main (int argc, char* argv[]) {
         }
 
         // We have our terms without peeking.
-        g_print("\tHave all lowest terms without peeking:\n"); 
-        for_each_list_item(postings, display_term_docs);
-        
-        g_print("\tCollect terms:\n"); 
         for_each_list_item(postings, collect_term_docs);
-        for_each_list_item(postings, display_term_docs);
 
         GSList *node = postings;
         while ((node = node->next) != NULL) {
