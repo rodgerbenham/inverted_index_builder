@@ -27,17 +27,17 @@ void clear_term_docs(GSList*);
 term_docs_t* bsearch_postings(char *, gpointer *, size_t,
         int(*compare)(char* key, term_docs_t* doc)); 
 
-GHashTable *id_to_term_map; 
-GHashTable *term_to_id_map; 
+GHashTable *id_to_term_map = NULL; 
+GHashTable *term_to_id_map = NULL; 
 
 int
 main (int argc, char* argv[]) {
     int document_id_counter = 0;
     int term_id_counter = 0;
     
-    GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
-    id_to_term_map = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
-    term_to_id_map = g_hash_table_new(g_int_hash, g_int_equal);
+    GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, g_free);
+    id_to_term_map = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
+    term_to_id_map = g_hash_table_new(g_str_hash, g_str_equal);
 
     for (int i = 0; i <= BLOCKS; i++) {
         struct dirent *dp;
@@ -88,11 +88,14 @@ main (int argc, char* argv[]) {
         }
         closedir(dfd);
 
+        for_each_list_item(term_doc_list, display_term_docs);
+
         g_print("\t%d terms loaded\n", g_slist_length(term_doc_list));
         g_print("\tSorting Phase\n");
         term_doc_list = g_slist_sort(term_doc_list, (GCompareFunc)term_sort_comparator);
         g_print("\tCollect Phase\n");
         for_each_list_item(term_doc_list, collect_term_docs);
+        for_each_list_item(term_doc_list, display_term_docs);
         g_print("\tWrite Intermediate File Phase\n");
         
         char i_file_path[MAX_DOC_TITLE_LENGTH];
@@ -201,7 +204,19 @@ main (int argc, char* argv[]) {
                 // Term document mapping has been serialised
                 // Add to the postings list in sorted order in favour of smallest term_id first.
                 // We will be using this singly linked list as a priority queue.
-                postings = g_slist_insert(postings, t_doc, 1);
+
+                // If the term_doc generated is invalid, free it
+                // and don't add it to the collection.
+                if (g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(t_doc->term_id)) == NULL) {
+                    g_slist_free(t_doc->doc_ids);
+                    g_free(t_doc);
+                }
+                else {
+                    postings = g_slist_insert(postings, t_doc, 1);
+                    g_print("Add posting (block %d)\n", i);
+                    postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
+                    for_each_list_item(postings, display_term_docs);
+                }
 
                 if (c == EOF) {
                     // Mark the file as unsafe for future reading
@@ -219,8 +234,6 @@ main (int argc, char* argv[]) {
             break;
         }
 
-        postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
-        //for_each_list_item(postings, display_term_docs);
         GSList* originalNext = postings->next;
         for_each_list_item(postings, collect_term_docs);
         postings->next = originalNext;
@@ -229,7 +242,10 @@ main (int argc, char* argv[]) {
 
         while ((node = node->next) != NULL) {
             term_docs_t* term_doc = (term_docs_t*) node->data; 
-            if (g_hash_table_lookup(id_to_term_map, &term_doc->term_id) == NULL) {
+            if (term_doc == NULL) {
+                continue;
+            }
+            if (g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(term_doc->term_id)) == NULL) {
                 break;
             }
             fprintf(index_fp, "%d|", term_doc->term_id);
@@ -246,7 +262,7 @@ main (int argc, char* argv[]) {
             fprintf(index_fp, "\n");
         }
 
-        for_each_list_item(postings, clear_term_docs);
+        //for_each_list_item(postings, clear_term_docs);
         g_slist_free(postings);
     }
     
@@ -288,9 +304,9 @@ main (int argc, char* argv[]) {
 void
 write_mapping(gpointer key, gpointer value, gpointer file) {
     FILE *fp = (FILE*)file;
-    int *termId = (int*)key;
+    int termId = GPOINTER_TO_INT(key);
     char *termValue = (char*)value;
-    fprintf(fp, "%d|%s\n", *termId, termValue);
+    fprintf(fp, "%d|%s\n", termId, termValue);
 }
 
 term_docs_t *
@@ -320,7 +336,7 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
     int c;
     FILE *file;
     file = fopen(path, "r");
-    GString *term;
+    GString *term = NULL;
     term = g_string_new("");
     while ((c = getc(file)) != EOF) {
         if (c == ' ') {
@@ -342,18 +358,17 @@ read_doc_file(int doc_id, int* term_id_counter, char* path, GSList *list) {
 
 int
 generate_term_mapping(char* term, int* term_id_counter) {
-    int *term_id;
-    if ((term_id = g_hash_table_lookup(term_to_id_map, term)) != NULL) {
-        return *term_id;
+    char *cleaned_term = g_strstrip(term);
+    int term_id = GPOINTER_TO_INT(g_hash_table_lookup(term_to_id_map, cleaned_term));
+    if (term_id > 0) {
+        return GPOINTER_TO_INT(term_id);
     }
     (*term_id_counter)++;
-    g_print("term id added to = %d", *term_id_counter);
-    term_id = malloc(sizeof(int));
-    *term_id = *term_id_counter;
-    char *term_ptr = g_strdup(g_strstrip(term));
-    g_hash_table_insert(id_to_term_map, term_id, term_ptr);
-    g_hash_table_insert(term_to_id_map, term_ptr, term_id);
-    return *term_id;
+    term_id = *term_id_counter;
+    char *term_ptr = g_strdup(cleaned_term);
+    g_hash_table_insert(id_to_term_map, GINT_TO_POINTER(term_id), term_ptr);
+    g_hash_table_insert(term_to_id_map, term_ptr, GINT_TO_POINTER(term_id));
+    return term_id;
 }
 
 term_docs_t*
@@ -404,12 +419,18 @@ void
 display_term_docs(GSList *node) {
     term_docs_t* term_doc = (term_docs_t*) node->data; 
     if (term_doc != NULL) {
-        g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(id_to_term_map, &term_doc->term_id));
+        g_print("term id = %d, term = %s, doc = ", term_doc->term_id, (char *)g_hash_table_lookup(id_to_term_map, GINT_TO_POINTER(term_doc->term_id)));
         GSList *next = term_doc->doc_ids;
-        g_print("%d ", GPOINTER_TO_INT(next->data));
-
-        while ((next = next->next) != NULL) {
+        if (next != NULL) {
             g_print("%d ", GPOINTER_TO_INT(next->data));
+            while ((next = next->next) != NULL) {
+                g_print("%d ", GPOINTER_TO_INT(next->data));
+            }
+        }
+        else {
+            g_print("===Error===\n");
+            g_print("An error was found in term id %d\n", term_doc->term_id);
+            g_print("There is no doc_ids associated with it for some reason\n");
         }
         g_print("\n");
     }
