@@ -310,6 +310,11 @@ deserialize_term_doc(FILE* file, bool peek) {
                 g_string_free(temp, TRUE);
                 temp = g_string_new("");
                 state++;
+
+                if (peek) {
+                    // If we are peeking we don't need the associated doc list.
+                    break;
+                }
             }
         }
         else if (state == 1) {
