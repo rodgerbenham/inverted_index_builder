@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 2
+#define BLOCKS 9
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
