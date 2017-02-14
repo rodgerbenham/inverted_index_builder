@@ -13,9 +13,12 @@ struct TermDocs {
     GSList *doc_ids;
 } typedef term_docs_t;
 
+typedef int bool;
+
 void write_mapping(gpointer, gpointer, gpointer);
 void read_doc_file(int, int*, char*, GSList*);
 int generate_term_mapping(char*, int*); 
+term_docs_t* deserialize_term_doc(FILE*, bool);
 term_docs_t* generate_term_doc(int, int); 
 gint term_sort_comparator(gconstpointer, gconstpointer);
 gint doc_sort_comparator(gconstpointer, gconstpointer);
@@ -151,37 +154,76 @@ main (int argc, char* argv[]) {
         g_print("Could not open index file for writing.");
         return -1;
     }
-    
-    while(1) {
-        GSList *postings;
+
+    GSList *postings;
+    postings = NULL;
+    postings = g_slist_alloc();
+    do {
+        for_each_list_item(postings, clear_term_docs);
+        g_slist_free(postings);
         postings = NULL;
         postings = g_slist_alloc();
 
+        // Peek all blocks
+        GHashTable* t_doc_block_map = g_hash_table_new(g_direct_hash, g_direct_equal);
         for (int i = 0; i <= BLOCKS; i++) {
             if (block_intermediate_fp[i] != NULL) {
-                term_doc_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], false); 
+                term_docs_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], 1); 
                 if (t_doc != NULL) {
                     postings = g_slist_insert(postings, t_doc, 1);
-                    g_print("Add posting (block %d)\n", i);
-                    postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
-                    for_each_list_item(postings, display_term_docs);
+                }
+
+                // Store the term doc to block mapping to only read from appropriate files.
+                GSList *blocks;
+                blocks = NULL;
+                if ((blocks = g_hash_table_lookup(t_doc_block_map, 
+                            GINT_TO_POINTER(t_doc->term_id))) == NULL) {
+                    blocks = g_slist_alloc();
+                    blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
+                    g_hash_table_insert(t_doc_block_map, GINT_TO_POINTER(t_doc->term_id),
+                        blocks);
+                }
+                else {
+                    blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
+                }
+            }
+        }
+        g_print("\tPeek phase\n");
+        postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
+        for_each_list_item(postings, display_term_docs);
+
+        g_print("\tGet the smallest term id\n");
+        int smallest_term_id = ((term_docs_t*)(g_slist_nth(postings, 1)->data))->term_id;
+        g_print("\tSmallest term id = %d\n", smallest_term_id);
+        
+        // We have the smallest term id now. So let's get all term_docs without peeking.
+        for_each_list_item(postings, clear_term_docs);
+        g_slist_free(postings);
+        postings = NULL;
+        postings = g_slist_alloc();
+
+        GSList *blocks = (GSList*)g_hash_table_lookup(t_doc_block_map, 
+                GINT_TO_POINTER(smallest_term_id));
+
+        while ((blocks = blocks->next) != NULL) {
+            FILE* block_file = (FILE*)blocks->data;
+            if (block_file != NULL) {
+                term_docs_t* t_doc = deserialize_term_doc(block_file, 0); 
+                if (t_doc != NULL) {
+                    postings = g_slist_insert(postings, t_doc, 1);
                 }
             }
         }
 
-        if (g_slist_length(postings) == 1) {
-            g_print("No more postings to process\n");
-            for_each_list_item(postings, clear_term_docs);
-            g_slist_free(postings);
-            break;
-        }
-
-        GSList* originalNext = postings->next;
-        for_each_list_item(postings, collect_term_docs);
-        postings->next = originalNext;
+        // We have our terms without peeking.
+        g_print("\tHave all lowest terms without peeking:\n"); 
+        for_each_list_item(postings, display_term_docs);
         
-        GSList *node = postings;
+        g_print("\tCollect terms:\n"); 
+        for_each_list_item(postings, collect_term_docs);
+        for_each_list_item(postings, display_term_docs);
 
+        GSList *node = postings;
         while ((node = node->next) != NULL) {
             term_docs_t* term_doc = (term_docs_t*) node->data; 
             if (term_doc == NULL) {
@@ -204,10 +246,8 @@ main (int argc, char* argv[]) {
             fprintf(index_fp, "\n");
         }
 
-        //for_each_list_item(postings, clear_term_docs);
-        g_slist_free(postings);
-    }
-    
+    } while (g_slist_length(postings) > 1);
+        
     // Clean up files.
     for (int i = 0; i <= BLOCKS; i++) {
         if (block_intermediate_fp[i] != NULL) {
@@ -243,7 +283,7 @@ main (int argc, char* argv[]) {
     return 0;
 }
 
-term_doc_t*
+term_docs_t*
 deserialize_term_doc(FILE* file, bool peek) {
     int c;
     int state = 0;
