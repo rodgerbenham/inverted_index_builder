@@ -27,8 +27,6 @@ void for_each_list_item(GSList*, void (*action)(GSList *list));
 void collect_term_docs(GSList*);
 void display_term_docs(GSList*);
 void clear_term_docs(GSList*);
-term_docs_t* bsearch_postings(char *, gpointer *, size_t,
-        int(*compare)(char* key, term_docs_t* doc)); 
 
 GHashTable *id_to_term_map = NULL; 
 GHashTable *term_to_id_map = NULL; 
@@ -357,28 +355,6 @@ write_mapping(gpointer key, gpointer value, gpointer file) {
     int termId = GPOINTER_TO_INT(key);
     char *termValue = (char*)value;
     fprintf(fp, "%d|%s\n", termId, termValue);
-}
-
-term_docs_t *
-bsearch_postings (char *key, gpointer *array, size_t num,
-        int(*compare)(char* key, term_docs_t* doc)) {
-    size_t start = 0, end = num;
-    int result;
-
-    while (start < end) {
-        size_t mid = start + (end - start) / 2;
-        term_docs_t* doc = (term_docs_t*) *(array + mid);
-
-        result = compare(key, doc);
-        if (result < 0)
-            end = mid;
-        else if (result > 0)
-            start = mid + 1;
-        else
-            return *(array + mid);
-    }
-
-    return NULL;
 }
 
 void
