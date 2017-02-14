@@ -171,24 +171,28 @@ main (int argc, char* argv[]) {
                 term_docs_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], 1); 
                 if (t_doc != NULL) {
                     postings = g_slist_insert(postings, t_doc, 1);
-                }
 
-                // Store the term doc to block mapping to only read from appropriate files.
-                GSList *blocks;
-                blocks = NULL;
-                if ((blocks = g_hash_table_lookup(t_doc_block_map, 
-                            GINT_TO_POINTER(t_doc->term_id))) == NULL) {
-                    blocks = g_slist_alloc();
-                    blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
-                    g_hash_table_insert(t_doc_block_map, GINT_TO_POINTER(t_doc->term_id),
-                        blocks);
-                }
-                else {
-                    blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
+                    // Store the term doc to block mapping to only read from appropriate files.
+                    GSList *blocks;
+                    blocks = NULL;
+                    if ((blocks = g_hash_table_lookup(t_doc_block_map, 
+                                GINT_TO_POINTER(t_doc->term_id))) == NULL) {
+                        blocks = g_slist_alloc();
+                        blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
+                        g_hash_table_insert(t_doc_block_map, GINT_TO_POINTER(t_doc->term_id),
+                            blocks);
+                    }
+                    else {
+                        blocks = g_slist_insert(blocks, block_intermediate_fp[i], 1);
+                    }
                 }
             }
         }
         g_print("\tPeek phase\n");
+        if (g_slist_length(postings) == 1) {
+            g_print("No more data\n");
+            break;
+        }
         postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
         for_each_list_item(postings, display_term_docs);
 
