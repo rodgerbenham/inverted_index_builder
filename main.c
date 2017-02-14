@@ -220,8 +220,11 @@ main (int argc, char* argv[]) {
         }
 
         postings = g_slist_sort(postings, (GCompareFunc)term_sort_comparator);
+        //for_each_list_item(postings, display_term_docs);
+        GSList* originalNext = postings->next;
         for_each_list_item(postings, collect_term_docs);
-
+        postings->next = originalNext;
+        
         GSList *node = postings;
 
         while ((node = node->next) != NULL) {
@@ -372,12 +375,7 @@ term_sort_comparator(gconstpointer item1, gconstpointer item2) {
     term_docs_t* term_doc_2 = (term_docs_t*) item2; 
     if (term_doc_1 != NULL && term_doc_2 != NULL) {
         // CASE: Normal case
-        char* term1 = (char *)g_hash_table_lookup(id_to_term_map, &term_doc_1->term_id); 
-        char* term2 = (char *)g_hash_table_lookup(id_to_term_map, &term_doc_2->term_id); 
-
-        if (term1 != NULL && term2 != NULL) {
-            return g_ascii_strcasecmp(term1, term2);
-        }
+        return term_doc_1->term_id - term_doc_2->term_id;
     }
 
     // CASE: Initial allocation of the list where data = NULL.
