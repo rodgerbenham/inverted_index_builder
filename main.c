@@ -38,7 +38,7 @@ main (int argc, char* argv[]) {
     int document_id_counter = 0;
     int term_id_counter = 0;
     
-    GHashTable *doc_map = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, g_free);
+    GHashTable *doc_map = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
     id_to_term_map = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
     term_to_id_map = g_hash_table_new(g_str_hash, g_str_equal);
 
@@ -82,10 +82,8 @@ main (int argc, char* argv[]) {
             else
             {
                 document_id_counter++;
-                int *doc_id = malloc(sizeof(int));
-                *doc_id = document_id_counter;
-
-                g_hash_table_insert(doc_map, (gpointer) doc_id, g_strdup(filename_qfd));
+                g_hash_table_insert(doc_map, GINT_TO_POINTER(document_id_counter), 
+                        g_strdup(filename_qfd));
                 read_doc_file(document_id_counter, &term_id_counter, filename_qfd, term_doc_list);
             }
         }
@@ -165,7 +163,8 @@ main (int argc, char* argv[]) {
         postings = g_slist_alloc();
 
         // Peek all blocks
-        GHashTable* t_doc_block_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+        GHashTable* t_doc_block_map = g_hash_table_new_full(g_direct_hash, 
+                g_direct_equal, NULL, (GDestroyNotify)g_slist_free);
         for (int i = 0; i <= BLOCKS; i++) {
             if (block_intermediate_fp[i] != NULL) {
                 term_docs_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], 1); 
@@ -249,6 +248,8 @@ main (int argc, char* argv[]) {
             }
             fprintf(index_fp, "\n");
         }
+
+        g_hash_table_destroy(t_doc_block_map);
 
     } while (g_slist_length(postings) > 1);
         
