@@ -1,1 +1,1 @@
-: main.c |> gcc -g -O0 main.c -o main `pkg-config --cflags --libs glib-2.0` |> main
+: main.c |> gcc -g -O3 main.c -o main `pkg-config --cflags --libs glib-2.0` |> main

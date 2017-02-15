@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define BLOCKS 9
+#define BLOCKS 10
 #define MAX_DOC_TITLE_LENGTH 500
 
 struct TermDocs {
@@ -40,7 +40,7 @@ main (int argc, char* argv[]) {
     id_to_term_map = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
     term_to_id_map = g_hash_table_new(g_str_hash, g_str_equal);
 
-    for (int i = 0; i <= BLOCKS; i++) {
+    for (int i = 0; i < BLOCKS; i++) {
         struct dirent *dp;
         DIR *dfd;
         g_print("Starting block %d:\n", i);
@@ -128,7 +128,7 @@ main (int argc, char* argv[]) {
     g_print("Merge Phase\n");
     // Open all intermediate files for reading.
     FILE* block_intermediate_fp[BLOCKS];
-    for (int i = 0; i <= BLOCKS; i++) {
+    for (int i = 0; i < BLOCKS; i++) {
         char i_file_path[MAX_DOC_TITLE_LENGTH];
         sprintf(i_file_path, "./intermediates/%d.intermediate", i);
 
@@ -159,7 +159,7 @@ main (int argc, char* argv[]) {
         // Peek all blocks
         GHashTable* t_doc_block_map = g_hash_table_new_full(g_direct_hash, 
                 g_direct_equal, NULL, (GDestroyNotify)g_slist_free);
-        for (int i = 0; i <= BLOCKS; i++) {
+        for (int i = 0; i < BLOCKS; i++) {
             if (block_intermediate_fp[i] != NULL) {
                 term_docs_t* t_doc = deserialize_term_doc(block_intermediate_fp[i], 1); 
                 if (t_doc != NULL) {
@@ -239,7 +239,7 @@ main (int argc, char* argv[]) {
     } while (g_slist_length(postings) > 1);
         
     // Clean up files.
-    for (int i = 0; i <= BLOCKS; i++) {
+    for (int i = 0; i < BLOCKS; i++) {
         if (block_intermediate_fp[i] != NULL) {
             fclose(block_intermediate_fp[i]);
         }
