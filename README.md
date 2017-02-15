@@ -22,15 +22,16 @@ Run by invoking `./main` in your shell.
 
 The files output are `./doc.dict`, `./term.dict` and importantly `./posting.dict` - the index we want.
 
-## Performance
+## Experimental Results
 
-It took me 7 minutes and 23 seconds to complete and consumed 388MB of RAM, in a virtual machine on an Intel i5-2400 CPU @ 3.10GHz with DDR3 memory, and a Seagate Barracuda 7200RPM SATA HDD with 64MB of cache.
-Your milage may vary.
+It took 12 minutes and 15 seconds to complete indexing on the Stanford A1 corpus. The program consumed 388MB of RAM, in a virtual machine on an Intel i5-2400 CPU @ 3.10GHz with DDR3 memory, and a Seagate Barracuda 7200RPM SATA HDD with 64MB of cache.
 
 RAM usage grows with respect to new terms, because the BSBI algorithm needs a data structure for mapping terms to termIDs.
 
 ## Improvements
 
 The code could use some refactoring and breaking out into seperate files for comparators, file manipulation functions etc.
+
+There is no support for compression and would very much benefit from gamma encoding.
 
 There is presently no support for stop words.
