@@ -1,3 +1,5 @@
+I'm keeping this repo public for posterity- this was my first adventure into IR. Please tread carefully, it does what it says on the tin but it could be significantly improved.
+
 # Blocked Sort-Based Indexer
 C-based BSBI Inverted Index Builder for Stanford CS276 corpus.
 
